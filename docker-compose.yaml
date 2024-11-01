@@ -1,60 +1,52 @@
 services:
-  zookeeper: # Manage Kafka brokers
-    image: confluentinc/cp-zookeeper:latest
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-    networks: 
+  de_zookeeper: # Manage Kafka brokers
+    image: debezium/zookeeper:2.0
+    container_name: debezium_zookeeper
+    ports:
+      - 2181:2181
+      - 2888:2888
+      - 3888:3888
+    networks:
       - de_vault
 
-  kafka: # Message broker for streaming data
-    image: confluentinc/cp-kafka:latest
-    depends_on:
-      - zookeeper
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+  de_kafka: # Message broker for streaming data
+    image: debezium/kafka:2.0
+    container_name: debezium_kafka
     ports:
-      - "9092:9092"
-    networks: 
+      - "9093:9092"
+    links:
+      - de_zookeeper
+    environment:
+      - ZOOKEEPER_CONNECT=zookeeper:2181
+    networks:
+      - de_vault
+
+  de_mysql:
+    image: debezium/example-mysql:2.0
+    container_name: debezium_mysql
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    env_file:
+      - .env
+    networks:
       - de_vault
 
   connect: # Debezium connector for capturing CDC events
-    image: debezium/connect:1.9.7.Final
-    depends_on:
-      - kafka
+    image: debezium/connect:2.0
+    container_name: debezium_connect
+    ports:
+      - 8083:8083
+    links:
+      - de_kafka
+      - de_mysql
     environment:
       BOOTSTRAP_SERVERS: kafka:9092
-      GROUP_ID: 1
+      GROUP_ID: 1 # group id of kafka connect cluster
       CONFIG_STORAGE_TOPIC: my_connect_configs
       OFFSET_STORAGE_TOPIC: my_connect_offsets
       STATUS_STORAGE_TOPIC: my_connect_statuses
-      KEY_CONVERTER_SCHEMAS_ENABLE: false
-      VALUE_CONVERTER_SCHEMAS_ENABLE: false
-      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-      CONNECT_REST_ADVERTISED_HOST_NAME: connect
-      CONNECT_REST_PORT: 8083
-      CONNECT_LOG4J_ROOT_LOGLEVEL: INFO
-      CONNECT_PLUGIN_PATH: /kafka/connect
-    ports:
-      - "8083:8083"
-    volumes:
-      - ./plugins:/kafka/connect
-    networks: 
-      - de_vault
-      
-  de_mysql:
-    image: mysql:latest
-    container_name: de_mysql
-    volumes:
-      - ./mysql:/var/lib/mysql
-    ports:
-      - "3306:3306" # port mapping
-    env_file:
-      - .env
     networks:
       - de_vault
 
