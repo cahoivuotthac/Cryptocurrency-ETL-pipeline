@@ -1,0 +1,165 @@
+services:
+  zookeeper: # Manage Kafka brokers
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks: 
+      - de_vault
+
+  kafka: # Message broker for streaming data
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+    networks: 
+      - de_vault
+
+  connect: # Debezium connector for capturing CDC events
+    image: debezium/connect:1.9.7.Final
+    depends_on:
+      - kafka
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: my_connect_configs
+      OFFSET_STORAGE_TOPIC: my_connect_offsets
+      STATUS_STORAGE_TOPIC: my_connect_statuses
+      KEY_CONVERTER_SCHEMAS_ENABLE: false
+      VALUE_CONVERTER_SCHEMAS_ENABLE: false
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_REST_PORT: 8083
+      CONNECT_LOG4J_ROOT_LOGLEVEL: INFO
+      CONNECT_PLUGIN_PATH: /kafka/connect
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./plugins:/kafka/connect
+    networks: 
+      - de_vault
+      
+  de_mysql:
+    image: mysql:latest
+    container_name: de_mysql
+    volumes:
+      - ./mysql:/var/lib/mysql
+    ports:
+      - "3306:3306" # port mapping
+    env_file:
+      - .env
+    networks:
+      - de_vault
+
+  de_psql:
+    image: postgres:latest
+    container_name: de_psql
+    volumes:
+      - ./postgresql:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+    networks:
+      - de_vault
+
+  de_minio:
+    hostname: minio
+    image: minio/minio
+    container_name: de_minio
+    ports:
+      # "9001:9001" #maps port 9001 on the host machine to port 9000 on the container
+      - "9000:9001"
+    command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - ./minio:/data
+    env_file:
+      - .env
+    networks:
+      - de_vault
+
+  # Dagster
+  de_dagster:
+    container_name: de_dagster
+    image: de_dagster
+
+  de_dagster_dagit:
+    image: de_dagster:latest
+    entrypoint:
+      - dagit
+      - -h
+      - "0.0.0.0"
+      - -p
+      - "3001"
+      - -w
+      - workspace.yaml
+    container_name: de_dagster_dagit
+    expose:
+      - "3001"
+    ports:
+      - "3001:3001"
+    volumes: # Make docker client accessible so we can terminate containers from dagit
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./dagster_home:/opt/dagster/dagster_home
+    env_file:
+      - .env
+    networks:
+      - de_vault
+
+  de_dagster_daemon:
+    image: de_dagster:latest
+    entrypoint:
+      - dagster-daemon
+      - run
+    container_name: de_dagster_daemon
+    volumes: # Make docker client accessible so we can launch containers using host docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./dagster_home:/opt/dagster/dagster_home
+    env_file:
+      - .env
+    networks:
+      - de_vault
+
+  # Minio Client
+  de_mc:
+    image: minio/mc
+    container_name: de_mc
+    hostname: mc
+    env_file:
+      - .env
+    entrypoint: >
+      /bin/sh -c " until (/usr/bin/mc config host add minio
+      http://localhost:9001 minio minio123) do echo '...waiting...' && sleep 1;
+      done; /usr/bin/mc mb minio/warehouse; /usr/bin/mc policy set public
+      minio/warehouse; exit 0; "
+    depends_on:
+      - de_minio
+    networks:
+      - de_vault
+
+  # Pipelines
+#  etl_pipeline:
+#    build:
+#      context: etl_pipeline/
+#      dockerfile: ./Dockerfile
+#    container_name: etl_pipeline
+#    image: etl_pipeline:latest
+#    volumes:
+#      - ./etl_pipeline:/opt/dagster/app
+#    env_file:
+#      - .env
+#    networks:
+#      - de_vault
+#    command: ["tail", "-f", "/dev/null"]
+
+networks:
+  de_vault:
+    driver: bridge
+    name: de_vault
