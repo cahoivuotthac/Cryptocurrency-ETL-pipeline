@@ -4,7 +4,9 @@ import mysql.connector
 import os
 from dotenv import load_dotenv
 import pandas as pd
-from src.setup import connect_mysql, fetch_data_from_api
+from init import connect_mysql, fetch_data_from_api
+
+load_dotenv()
 
 def insert_into_mysql(data):
     conn = connect_mysql()

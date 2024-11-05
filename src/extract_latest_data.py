@@ -5,7 +5,7 @@ import mysql.connector
 import os
 from dotenv import load_dotenv
 import schedule
-from src.setup import connect_mysql, fetch_data_from_api
+from init import connect_mysql, fetch_data_from_api
 
 load_dotenv()
 
