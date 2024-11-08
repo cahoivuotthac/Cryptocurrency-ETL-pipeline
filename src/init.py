@@ -25,7 +25,7 @@ def fetch_data_from_api(api_url):
 		'Accepts': 'application/json',
 		'X-CMC_PRO_API_KEY': os.getenv('COINMARKETCAP_API_KEY')
 	}
-	params = {'slug': "bitcoin,ethereum,solana,polygon,polkadot,pepe-cash,dogecoin"}
+	params = {'slug': "bitcoin,ethereum,solana,polygon,polkadot,pepe,dogecoin"}
 	session = Session()
 	session.headers.update(headers)
 	

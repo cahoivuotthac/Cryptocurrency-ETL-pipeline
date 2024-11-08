@@ -1,10 +1,5 @@
-import json
-import time
-from requests import Session, Timeout, TooManyRedirects
 import mysql.connector 
-import os
 from dotenv import load_dotenv
-import schedule
 from init import connect_mysql, fetch_data_from_api
 
 load_dotenv()
@@ -39,8 +34,9 @@ def insert_into_mysql(data):
 				usd_price_percent_change_7d, 
 				usd_price_percent_change_30d, 
 				usd_market_cap, 
-				usd_market_cap_dominanc)
-			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+				usd_market_cap_dominance,
+    			last_updated)
+			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 			"""
 		)
 		if "data" not in data: 
@@ -63,7 +59,8 @@ def insert_into_mysql(data):
 			usd_price_percent_change_30d = record["quote"]["USD"]["percent_change_30d"]
 			usd_market_cap = record["quote"]["USD"]["market_cap"]
 			usd_market_cap_dominance = record["quote"]["USD"]["market_cap_dominance"]
-			
+			last_updated = record["quote"]["USD"]["last_updated"]
+   
 			cursor.execute(insert_query_metrics, (crypto_id, cmc_rank, num_market_pairs, circulating_supply, last_updated))
 			cursor.execute(
 				insert_query_quote, 
@@ -81,16 +78,11 @@ def insert_into_mysql(data):
 
 
 def main():
-	# Schedule this script to run every 10 minutes
 	url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
-	schedule.every(15).minutes.do(insert_into_mysql(fetch_data_from_api(url)))
-	
-	while True: 
-		schedule.run_pending()
-		time.sleep(1)
+	data = fetch_data_from_api(url)
+	insert_into_mysql(data)
 		
 if __name__ == "__main__":
 	main()
-	
 	
 	
